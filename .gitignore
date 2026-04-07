@@ -36,6 +36,7 @@ yarn-error.log*
 tree.txt
 PRD.md
 instructions.md
+/supabase
 # vercel
 .vercel
 

@@ -17,8 +17,8 @@ export default function TodosPage() {
       .sort((a, b) => (a.due_time ?? '').localeCompare(b.due_time ?? ''))
   }, [selectedDate])
   return (
-    <main className="min-h-screen bg-black px-4 py-8">
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-6">
+    <main className="min-h-screen bg-black">
+      <div className="px-4 py-6 flex flex-col max-w-lg mx-auto">
         <TodoCalendar
           todos={mockTodos}
           selectedDate={selectedDate}

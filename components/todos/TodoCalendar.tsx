@@ -39,7 +39,7 @@ export default function TodoCalendar({ todos, selectedDate, onSelectDate }: Prop
     }, [currentMonth])
 
     return (
-        <div className="w-full max-w-sm rounded-[32px] bg-zinc-900 p-6 text-white shadow-2xl">
+        <div className="w-full bg-zinc-900 p-6 text-white shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
                 <button
                     onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}

@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit } from '@/utils/rateLimit'
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -9,6 +10,15 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const limiter = rateLimit(`todos:create:${user.id}`, 10, 10_000)
+  if (!limiter.ok) {
+    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
   }
 
   let body: unknown

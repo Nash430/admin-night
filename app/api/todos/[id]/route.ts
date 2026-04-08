@@ -1,11 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit } from '@/utils/rateLimit'
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
@@ -17,9 +18,18 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const id = params?.id
+  const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'id required' }, { status: 400 })
+  }
+
+  const limiter = rateLimit(`todos:update:${user.id}`, 15, 10_000)
+  if (!limiter.ok) {
+    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
   }
 
   let body: unknown
@@ -64,9 +74,18 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const id = params?.id
+  const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'id required' }, { status: 400 })
+  }
+
+  const limiter = rateLimit(`todos:delete:${user.id}`, 10, 10_000)
+  if (!limiter.ok) {
+    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
   }
 
   const { error } = await supabase

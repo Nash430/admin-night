@@ -33,14 +33,16 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = body as Record<string, unknown>
-  const content = typeof payload.content === 'string' ? payload.content.trim() : ''
+  const title = typeof payload.title === 'string' ? payload.title.trim() : ''
+  const descriptionRaw = typeof payload.description === 'string' ? payload.description.trim() : ''
+  const description = descriptionRaw ? descriptionRaw : null
   const due_date = typeof payload.due_date === 'string' ? payload.due_date : null
   const start_time = typeof payload.start_time === 'string' ? payload.start_time : null
   const end_time = typeof payload.end_time === 'string' ? payload.end_time : null
   const priority = payload.priority
 
-  if (!content) {
-    return NextResponse.json({ error: 'Content required' }, { status: 400 })
+  if (!title) {
+    return NextResponse.json({ error: 'Title required' }, { status: 400 })
   }
   if (!due_date) {
     return NextResponse.json({ error: 'due_date required' }, { status: 400 })
@@ -70,7 +72,8 @@ export async function POST(request: NextRequest) {
     .from('todos')
     .insert({
       user_id: user.id,
-      content,
+      title,
+      description,
       due_date,
       due_time: start_time,
       end_time,
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
       is_done: false,
       sort_order: 0,
     })
-    .select()
+    .select('id')
     .single()
 
   if (error) {

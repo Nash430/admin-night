@@ -13,24 +13,7 @@ An anonymous meetup platform that helps procrastination-prone users complete adm
 - **Map Integration:** Leaflet (via React-Leaflet)
 - **Deployment:** Vercel
 
-## Project Structure
 
-\`\`\`text
-app/
-  api/               # Route Handlers (Webhook, 外部觸發) # Route Handlers (Webhook, external triggers)
-  auth/              # Google OAuth / Auth Callback 
-  (main)/            # 帶有共用 Layout 的主要頁面  # Main pages with a shared layout
-    feed/            # 首頁 Feed (附近場次) # Home feed (nearby sessions)
-    sessions/        # 場次詳情 / 開一場 # Session details / create a session
-    todos/           # 個人待辦清單 # Personal to-do list
-components/
-  feed/              # Feed 專用 UI 組件 # Feed-specific UI components
-  session/           # 場次專用 UI 組件 (含 Map) # Session-specific UI components (including Map)
-  todos/             # 待辦清單 UI 組件 # To-do list UI components
-  ui/                # 共用基礎組件 (Buttons, Modals 等) # Shared base components (Buttons, Modals, etc.)
-utils/
-  supabase/          # Supabase Client / Server / Middleware 
-\`\`\`
 
 ## Getting Started
 

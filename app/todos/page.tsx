@@ -1,30 +1,25 @@
-'use client'
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import TodosClient from '@/components/todos/TodosClient'
 
-import { useMemo, useState } from 'react'
-import { format } from 'date-fns'
-import TodoCalendar from '@/components/todos/TodoCalendar'
-import TodoList from '@/components/todos/TodoList'
-import { mockTodos } from '@/components/todos/mockTodos'
+export default async function TodosPage() {
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
 
-export default function TodosPage() {
-   const [selectedDate, setSelectedDate] = useState(new Date())
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/auth/login')
 
-  const selectedTodos = useMemo(() => {
-    const dateKey = format(selectedDate, 'yyyy-MM-dd')
+  const { data: todos } = await supabase
+    .from('todos')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('due_date', { ascending: true })
 
-    return mockTodos
-      .filter((todo) => todo.due_date === dateKey)
-      .sort((a, b) => (a.due_time ?? '').localeCompare(b.due_time ?? ''))
-  }, [selectedDate])
   return (
     <main className="min-h-screen bg-black">
       <div className="px-4 py-6 flex flex-col max-w-lg mx-auto">
-        <TodoCalendar
-          todos={mockTodos}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-        />
-        <TodoList selectedDate={selectedDate} todos={selectedTodos} />
+        <TodosClient initialTodos={todos ?? []} />
       </div>
     </main>
   )

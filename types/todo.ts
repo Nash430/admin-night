@@ -1,8 +1,19 @@
 export type Todo = {
   id: string
-  content: string
+  title: string
+  description: string | null
   due_date: string
   due_time: string | null
+  end_time: string | null
   is_done: boolean
+  priority: 1 | 2 | 3
+}
+
+export type NewTodoInput = {
+  title: string
+  description?: string | null
+  due_date: string
+  start_time: string
+  end_time: string
   priority: 1 | 2 | 3
 }

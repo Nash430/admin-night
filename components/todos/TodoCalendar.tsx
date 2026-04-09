@@ -14,7 +14,14 @@ import {
     isSameDay,
 } from 'date-fns'
 import type { Todo } from '@/types/todo'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 const weekLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+const priorityDotColor: Record<Todo['priority'], string> = {
+    1: 'bg-cyan-400',
+    2: 'bg-amber-400',
+    3: 'bg-pink-500',
+}
 
 type Props = {
     todos: Todo[]
@@ -24,7 +31,6 @@ type Props = {
 
 export default function TodoCalendar({ todos, selectedDate, onSelectDate }: Props) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
-    // const [selectedDate, setSelectedDate] = useState(new Date())
     const calendarDays = useMemo(() => {
         const monthStart = startOfMonth(currentMonth)
         const monthEnd = endOfMonth(currentMonth)
@@ -38,14 +44,30 @@ export default function TodoCalendar({ todos, selectedDate, onSelectDate }: Prop
         })
     }, [currentMonth])
 
+    const todosByDate = useMemo(() => {
+        const map = new Map<string, Todo[]>()
+        for (const todo of todos) {
+            const list = map.get(todo.due_date)
+            if (list) {
+                list.push(todo)
+            } else {
+                map.set(todo.due_date, [todo])
+            }
+        }
+        return map
+    }, [todos])
+
     return (
         <div className="w-full bg-zinc-900 p-6 text-white shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
                 <button
-                    onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
+                    onClick={() => {
+                        const newMonth = subMonths(currentMonth, 1)
+                        setCurrentMonth(newMonth)
+                    }}
                     className="text-xl text-zinc-400 hover:text-white"
                 >
-                    ‹
+                    <ChevronLeft />
                 </button>
 
                 <div className="text-center">
@@ -56,10 +78,13 @@ export default function TodoCalendar({ todos, selectedDate, onSelectDate }: Prop
                 </div>
 
                 <button
-                    onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+                    onClick={() => {
+                        const newMonth = addMonths(currentMonth, 1)
+                        setCurrentMonth(newMonth)
+                    }}
                     className="text-xl text-zinc-400 hover:text-white"
                 >
-                    ›
+                    <ChevronRight />
                 </button>
             </div>
 
@@ -74,29 +99,27 @@ export default function TodoCalendar({ todos, selectedDate, onSelectDate }: Prop
                     const inCurrentMonth = isSameMonth(day, currentMonth)
                     const isSelected = isSameDay(day, selectedDate)
                     const dateKey = format(day, 'yyyy-MM-dd')
-                    const dayTodos = todos.filter((todo) => todo.due_date === dateKey)
+                    const dayTodos = todosByDate.get(dateKey) ?? []
 
                     return (
                         <button
                             key={day.toISOString()}
                             onClick={() => onSelectDate(day)}
-                            className="mx-auto flex flex-col items-center justify-center gap-1"
+                            className="mx-auto flex flex-col items-center justify-center gap-1 mt-1"
                         >
                             <div
-                                className={[
-                                    'flex h-9 w-9 items-center justify-center rounded-full text-sm',
-                                    isSelected ? 'bg-white font-semibold text-black' : '',
-                                    !isSelected && inCurrentMonth ? 'text-white' : '',
-                                    !isSelected && !inCurrentMonth ? 'text-zinc-600' : '',
-                                ].join(' ')}
-                            >
+                                className={`flex h-9 w-9 items-center justify-center rounded-full text-sm 
+                                    ${isSelected ? 'bg-white font-semibold text-black' : inCurrentMonth ? 'text-white' : 'text-zinc-600' }`}>
                                 {format(day, 'd')}
                             </div>
 
-                            <div className="h-2">
-                                {dayTodos.length > 0 && (
-                                    <span className="block h-1.5 w-1.5 rounded-full bg-pink-500" />
-                                )}
+                            <div className="flex h-2 items-center justify-center gap-1 flex-wrap m-auto  mx-2">
+                                {dayTodos.map((todo) => (
+                                    <span
+                                        key={todo.id}
+                                        className={`block h-1.5 w-1.5 rounded-full ${priorityDotColor[todo.priority]}`}
+                                    />
+                                ))}
                             </div>
                         </button>
                     )

@@ -1,102 +1,180 @@
-import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
-import { rateLimit } from '@/utils/rateLimit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/utils/withAuth'
+import { toMinutes } from '@/utils/time'
 
-type RouteContext = {
-  params: Promise<{
-    id: string
-  }>
+type TodoRouteParams = {
+  id: string
 }
 
-export async function PATCH(request: NextRequest, { params }: RouteContext) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+export const PATCH = withAuth<TodoRouteParams>(
+  {
+    rateLimit: { key: 'todos:update', limit: 15, windowMs: 10_000 },
+  },
+  async ({ user, supabase, body, params }): Promise<Response> => {
+    const id = params?.id
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
 
-  const { id } = await params
-  if (!id) {
-    return NextResponse.json({ error: 'id required' }, { status: 400 })
-  }
+    const payload: Record<string, unknown> = body ?? {}
+    const updates: Record<string, unknown> = {}
 
-  const limiter = rateLimit(`todos:update:${user.id}`, 15, 10_000)
-  if (!limiter.ok) {
-    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
-    return NextResponse.json(
-      { error: 'Too many requests' },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
-    )
-  }
+    if ('is_done' in payload) {
+      if (typeof payload.is_done !== 'boolean') {
+        return NextResponse.json(
+          { error: 'is_done must be boolean' },
+          { status: 400 },
+        )
+      }
+      updates.is_done = payload.is_done
+    }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+    if ('title' in payload) {
+      if (typeof payload.title !== 'string') {
+        return NextResponse.json(
+          { error: 'title must be string' },
+          { status: 400 },
+        )
+      }
 
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+      const trimmed = payload.title.trim()
+      if (!trimmed) {
+        return NextResponse.json({ error: 'Title required' }, { status: 400 })
+      }
 
-  const payload = body as Record<string, unknown>
-  const is_done = payload.is_done
+      updates.title = trimmed
+    }
 
-  if (typeof is_done !== 'boolean') {
-    return NextResponse.json({ error: 'is_done must be boolean' }, { status: 400 })
-  }
+    if ('description' in payload) {
+      if (payload.description !== null && typeof payload.description !== 'string') {
+        return NextResponse.json(
+          { error: 'description must be string or null' },
+          { status: 400 },
+        )
+      }
 
-  const { data, error } = await supabase
-    .from('todos')
-    .update({ is_done })
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .select()
-    .single()
+      updates.description =
+        payload.description === null ? null : payload.description.trim()
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+    if ('due_date' in payload) {
+      if (typeof payload.due_date !== 'string') {
+        return NextResponse.json(
+          { error: 'due_date must be string' },
+          { status: 400 },
+        )
+      }
+      updates.due_date = payload.due_date
+    }
 
-  return NextResponse.json({ todo: data })
-}
+    if ('due_time' in payload) {
+      if (typeof payload.due_time !== 'string') {
+        return NextResponse.json(
+          { error: 'due_time must be string' },
+          { status: 400 },
+        )
+      }
+      if (!/^\d{2}:\d{2}$/.test(payload.due_time)) {
+        return NextResponse.json(
+          { error: 'Invalid time format' },
+          { status: 400 },
+        )
+      }
+      updates.due_time = payload.due_time
+    }
 
-export async function DELETE(_request: NextRequest, { params }: RouteContext) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+    if ('end_time' in payload) {
+      if (typeof payload.end_time !== 'string') {
+        return NextResponse.json(
+          { error: 'end_time must be string' },
+          { status: 400 },
+        )
+      }
+      if (!/^\d{2}:\d{2}$/.test(payload.end_time)) {
+        return NextResponse.json(
+          { error: 'Invalid time format' },
+          { status: 400 },
+        )
+      }
+      updates.end_time = payload.end_time
+    }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    if ('priority' in payload) {
+      const value = Number(payload.priority)
+      if (![1, 2, 3].includes(value)) {
+        return NextResponse.json(
+          { error: 'Invalid priority' },
+          { status: 400 },
+        )
+      }
+      updates.priority = value
+    }
 
-  const { id } = await params
-  if (!id) {
-    return NextResponse.json({ error: 'id required' }, { status: 400 })
-  }
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields to update' },
+        { status: 400 },
+      )
+    }
 
-  const limiter = rateLimit(`todos:delete:${user.id}`, 10, 10_000)
-  if (!limiter.ok) {
-    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
-    return NextResponse.json(
-      { error: 'Too many requests' },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
-    )
-  }
+    if (typeof updates.due_time === 'string' && typeof updates.end_time === 'string') {
+      const startMinutes = toMinutes(updates.due_time)
+      const endMinutes = toMinutes(updates.end_time)
 
-  const { error } = await supabase
-    .from('todos')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id)
+      if (startMinutes === null || endMinutes === null) {
+        return NextResponse.json(
+          { error: 'Invalid time format' },
+          { status: 400 },
+        )
+      }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+      if (endMinutes <= startMinutes) {
+        return NextResponse.json(
+          { error: 'end_time must be after start_time' },
+          { status: 400 },
+        )
+      }
+    }
 
-  return NextResponse.json({ deleted_id: id })
-}
+    const { data, error } = await supabase
+      .from('todos')
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ todo: data })
+  },
+)
+
+export const DELETE = withAuth<TodoRouteParams>(
+  {
+    rateLimit: { key: 'todos:delete', limit: 10, windowMs: 10_000 },
+    parseBody: false,
+  },
+  async ({ user, supabase, params }): Promise<Response> => {
+    const id = params?.id
+
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ deleted_id: id })
+  },
+)

@@ -10,6 +10,12 @@ import {
 
 export const WEEK_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const
 
+export type TimeValue = {
+  period: 'AM' | 'PM'
+  hour: number
+  minute: number
+}
+
 export function toMinutes(value: string) {
   const [h, m] = value.split(':').map(Number)
   if (Number.isNaN(h) || Number.isNaN(m)) return null
@@ -27,7 +33,15 @@ export function periodToMinutes(period: 'AM' | 'PM', hour: number, minute: numbe
   return hour24 * 60 + minute
 }
 
-export function parseTimeParts(value: string) {
+export function timeValueToMinutes(value: TimeValue) {
+  return periodToMinutes(value.period, value.hour, value.minute)
+}
+
+export function toTimeString(value: TimeValue) {
+  return minutesToTime(timeValueToMinutes(value))
+}
+
+export function parseTimeParts(value: string): TimeValue {
   const [hh, mm] = value.split(':').map(Number)
   const period: 'AM' | 'PM' = hh >= 12 ? 'PM' : 'AM'
   const hour = hh % 12 === 0 ? 12 : hh % 12

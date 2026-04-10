@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import TodoCalendar from '@/components/todos/TodoCalendar'
 import TodoList from '@/components/todos/TodoList'
-import type { NewTodoInput, Todo } from '@/types/todo'
+import type { NewTodoInput, Todo, TodoUpdateInput } from '@/types/todo'
 
 type Props = {
   initialTodos: Todo[]
@@ -173,6 +173,39 @@ export default function TodosClient({ initialTodos }: Props) {
     return isSuccess
   }
 
+  async function onTodoEdited(id: string, updates: TodoUpdateInput) {
+    const previous = todos.find(t => t.id === id)
+    if (!previous) return false
+
+    const optimisticTodo: Todo = { ...previous, ...updates }
+
+    const rollback = () => {
+      setTodos(prev => prev.map(t => (t.id === previous.id ? previous : t)))
+    }
+
+    setTodos(prev => prev.map(t => (t.id === id ? optimisticTodo : t)))
+
+    const { isSuccess, payload } = await optimisticFetch(
+      `/api/todos/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      },
+      rollback,
+      'Failed to update todo'
+    )
+
+    if (!isSuccess) return false
+
+    const serverTodo = payload.todo as Todo | undefined
+    if (serverTodo?.id) {
+      setTodos(prev => prev.map(t => (t.id === id ? serverTodo : t)))
+    }
+
+    return true
+  }
+
 
   // 批次刪除 todo
   async function onTodosDeleted(ids: string[]) {
@@ -210,6 +243,7 @@ export default function TodosClient({ initialTodos }: Props) {
         todos={selectedTodos}
         onCreateTodo={onCreateTodo}
         onTodoUpdated={onTodoUpdated}
+        onTodoEdited={onTodoEdited}
         onTodosDeleted={onTodosDeleted}
       />
     </>

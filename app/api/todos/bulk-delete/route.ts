@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/utils/withAuth'
 
 export const POST = withAuth(
-  { key: 'todos:bulk-delete', limit: 5, windowMs: 10_000 },
-  async ({ user, supabase, body }) => {
-    const ids = Array.isArray(body.ids)
-      ? body.ids.filter((id): id is string => typeof id === 'string')
+  {
+    rateLimit: { key: 'todos:bulk-delete', limit: 5, windowMs: 10_000 },
+  },
+  async ({ user, supabase, body }): Promise<Response> => {
+    const input: Record<string, unknown> = body ?? {}
+
+    const ids = Array.isArray(input.ids)
+      ? input.ids.filter((id): id is string => typeof id === 'string')
       : []
 
     if (ids.length === 0) {

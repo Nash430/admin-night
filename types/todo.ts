@@ -20,3 +20,13 @@ export type NewTodoInput = {
   end_time: string
   priority: 1 | 2 | 3
 }
+
+export type TodoUpdateInput = {
+  title?: string
+  description?: string | null
+  due_date?: string
+  due_time?: string
+  end_time?: string
+  priority?: 1 | 2 | 3
+  is_done?: boolean
+}

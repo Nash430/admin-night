@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import type { NewTodoInput, Todo } from '@/types/todo'
 import { Plus, Trash2, CheckLine } from 'lucide-react'
@@ -26,6 +26,10 @@ export default function TodoList({ selectedDate, todos, onCreateTodo, onTodoUpda
   const displayTodos = todos
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<string[]>([])
+
+  useEffect(() => {
+    setSelectedDeleteIds([])
+  }, [selectedDate])
 
   async function handleToggleDone(todo: Todo) {
     await onTodoUpdated({ ...todo, is_done: !todo.is_done })

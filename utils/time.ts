@@ -1,3 +1,15 @@
+import {
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+} from 'date-fns'
+
+export const WEEK_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const
+
 export function toMinutes(value: string) {
   const [h, m] = value.split(':').map(Number)
   if (Number.isNaN(h) || Number.isNaN(m)) return null
@@ -57,9 +69,27 @@ export function formatDuration(start?: string | null, end?: string | null) {
 
 export function formatTime(value?: string | null) {
   if (!value) return null
-  const match = value.match(/(\d{1,2}):(\d{2})/)
-  if (!match) return value
-  const hh = match[1].padStart(2, '0')
-  const mm = match[2]
-  return `${hh}:${mm}`
+  const parts = value.split(':')
+  if (parts.length < 2) return value
+  return `${parts[0].padStart(2, '0')}:${parts[1]}`
+}
+
+export function buildCalendarDays(currentMonth: Date, weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1) {
+  const monthStart = startOfMonth(currentMonth)
+  const monthEnd = endOfMonth(currentMonth)
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn })
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn })
+
+  return eachDayOfInterval({
+    start: calendarStart,
+    end: calendarEnd,
+  })
+}
+
+export function formatDateKey(date: Date) {
+  return format(date, 'yyyy-MM-dd')
+}
+
+export function parseDateKey(value: string) {
+  return parseISO(value)
 }

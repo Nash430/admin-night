@@ -1,9 +1,12 @@
-﻿'use client'
+﻿
+'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
+import { CalendarDays } from 'lucide-react'
 import type { NewTodoInput } from '@/types/todo'
-import { getDefaultTimeRange, minutesToTime, periodToMinutes, parseTimeParts } from '@/utils/time'
+import { formatDateKey, getDefaultTimeRange, minutesToTime, parseDateKey, periodToMinutes, parseTimeParts } from '@/utils/time'
+import MiniCalendar from '@/components/todos/MiniCalendar'
 
 type Props = {
   open: boolean
@@ -23,7 +26,6 @@ type TimeValue = {
 const hourOptions = Array.from({ length: 12 }, (_, index) => index + 1)
 const minuteOptions = Array.from({ length: 60 }, (_, index) => index)
 const periodOptions: Period[] = ['AM', 'PM']
-
 type TimeSelectorProps = {
   label: string
   period: Period
@@ -125,6 +127,9 @@ function TimeSelector({
 export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [selectedDates, setSelectedDates] = useState<string[]>([])
+  const [currentMonth, setCurrentMonth] = useState<Date>(selectedDate)
+  const [showCalendar, setShowCalendar] = useState(false)
   const [startTime, setStartTime] = useState<TimeValue>({
     period: 'AM',
     hour: 9,
@@ -140,7 +145,19 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
   const [endTouched, setEndTouched] = useState(false)
   const lastDraftDateKey = useRef<string | null>(null)
 
-  const selectedDateKey = format(selectedDate, 'yyyy-MM-dd')
+  const selectedDateKey = formatDateKey(selectedDate)
+
+  const selectedDateSet = useMemo(() => new Set(selectedDates), [selectedDates])
+  const sortedSelectedDates = useMemo(
+    () => Array.from(new Set(selectedDates)).sort(),
+    [selectedDates],
+  )
+  const primaryDateKey = sortedSelectedDates[0] ?? selectedDateKey
+  const primaryDateLabel = useMemo(
+    () => format(parseDateKey(primaryDateKey), 'MMM d, yyyy'),
+    [primaryDateKey],
+  )
+  const extraDateCount = Math.max(0, sortedSelectedDates.length - 1)
 
   const startTotalMinutes = periodToMinutes(
     startTime.period,
@@ -156,18 +173,10 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
 
   const isTimeInvalid = endTotalMinutes <= startTotalMinutes
 
-  const to24Time = ({ period, hour, minute }: TimeValue) => {
-    return minutesToTime(periodToMinutes(period, hour, minute))
-  }
-
-  const updateStartTime = (patch: Partial<TimeValue>) => {
-    setStartTime(prev => ({ ...prev, ...patch }))
-  }
-
-  const updateEndTime = (patch: Partial<TimeValue>) => {
-    setEndTime(prev => ({ ...prev, ...patch }))
-    setEndTouched(true)
-  }
+  const updateTime = (
+    setter: React.Dispatch<React.SetStateAction<TimeValue>>,
+    patch: Partial<TimeValue>,
+  ) => setter(prev => ({ ...prev, ...patch }))
 
   const setDefaultTimes = () => {
     const { start, end } = getDefaultTimeRange(new Date(), 10, 60)
@@ -181,6 +190,9 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
     setPriority(3)
     setTitleError(false)
     setEndTouched(false)
+    setSelectedDates([selectedDateKey])
+    setCurrentMonth(selectedDate)
+    setShowCalendar(false)
     setDefaultTimes()
   }
 
@@ -191,6 +203,24 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
     resetDraft()
     lastDraftDateKey.current = selectedDateKey
   }, [open, selectedDateKey])
+
+  useEffect(() => {
+    if (!open) setShowCalendar(false)
+  }, [open])
+
+  const toggleDateSelection = (day: Date) => {
+    const key = formatDateKey(day)
+    setSelectedDates(prev => {
+      const set = new Set(prev)
+      if (set.has(key)) {
+        if (set.size === 1) return prev
+        set.delete(key)
+      } else {
+        set.add(key)
+      }
+      return Array.from(set).sort()
+    })
+  }
 
   const endTimeDisabledCheck = {
     isPeriodDisabled: (p: Period) => p === 'AM' && startTotalMinutes >= 12 * 60,
@@ -213,12 +243,20 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
       return
     }
 
+    const uniqueDates = Array.from(new Set(selectedDates)).sort()
+
+    if (uniqueDates.length === 0) {
+      setSelectedDates([selectedDateKey])
+      return
+    }
+
     const payload: NewTodoInput = {
       title: trimmedTitle,
       description: trimmedDescription ? trimmedDescription : null,
-      due_date: selectedDateKey,
-      start_time: to24Time(startTime),
-      end_time: to24Time(endTime),
+      due_date: uniqueDates[0],
+      dates: uniqueDates,
+      start_time: minutesToTime(periodToMinutes(startTime.period, startTime.hour, startTime.minute)),
+      end_time: minutesToTime(periodToMinutes(endTime.period, endTime.hour, endTime.minute)),
       priority,
     }
 
@@ -227,12 +265,17 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
     onClose()
   }
 
+  const openCalendarDialog = () => {
+    const seedKey = sortedSelectedDates[0] ?? selectedDateKey
+    setCurrentMonth(parseDateKey(seedKey))
+    setShowCalendar(true)
+  }
+
   return (
     <>
       <div
-        className={`fixed inset-0 z-50 bg-black/60 transition-opacity ${
-          open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`fixed inset-0 z-50 bg-black/60 transition-opacity ${open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
+          }`}
       />
 
       <div
@@ -250,7 +293,22 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
           </button>
         </div>
 
-        <p className="mt-2 text-xs text-zinc-600">{format(selectedDate, 'EEE, MMM d, yyyy')}</p>
+        <div
+        className='flex mt-1'>
+          <div className="text-sm  text-zinc-500">
+            {primaryDateLabel}
+            {extraDateCount > 0 ? ` +${extraDateCount}` : ''}
+
+          </div>
+          <button
+            type="button"
+            onClick={openCalendarDialog}
+            aria-label="Edit dates"
+            className="text-zinc-400 hover:text-white ml-1"
+          >
+            <CalendarDays className="h-4 w-4" />
+          </button>
+        </div>
 
         <div className="mt-4 space-y-3">
           <input
@@ -263,7 +321,7 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
             }}
             onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             className={`w-full rounded-2xl border bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2
-              ${ titleError ? 'border-red-500 focus:ring-red-500' : 'border-zinc-800 focus:ring-zinc-700'}`}
+              ${titleError ? 'border-red-500 focus:ring-red-500' : 'border-zinc-800 focus:ring-zinc-700'}`}
           />
 
           <textarea
@@ -280,9 +338,9 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
                 period={startTime.period}
                 hour={startTime.hour}
                 minute={startTime.minute}
-                onPeriodChange={p => updateStartTime({ period: p })}
-                onHourChange={h => updateStartTime({ hour: h })}
-                onMinuteChange={m => updateStartTime({ minute: m })}
+                onPeriodChange={p => updateTime(setStartTime, { period: p })}
+                onHourChange={h => updateTime(setStartTime, { hour: h })}
+                onMinuteChange={m => updateTime(setStartTime, { minute: m })}
               />
             </div>
 
@@ -291,9 +349,9 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
                 period={endTime.period}
                 hour={endTime.hour}
                 minute={endTime.minute}
-                onPeriodChange={p => updateEndTime({ period: p })}
-                onHourChange={h => updateEndTime({ hour: h })}
-                onMinuteChange={m => updateEndTime({ minute: m })}
+                onPeriodChange={p => { updateTime(setEndTime, { period: p }); setEndTouched(true) }}
+                onHourChange={h => { updateTime(setEndTime, { hour: h }); setEndTouched(true) }}
+                onMinuteChange={m => { updateTime(setEndTime, { minute: m }); setEndTouched(true) }}
                 disabledCheck={endTimeDisabledCheck}
               />
               {endTouched && isTimeInvalid && (
@@ -323,6 +381,63 @@ export default function AddTodo({ open, onClose, selectedDate, onCreateTodo }: P
           </button>
         </div>
       </div>
+
+      {showCalendar && (
+        <div className="fixed inset-0 z-[80]">
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setShowCalendar(false)}
+          />
+          <div className="relative z-[90] flex h-full w-full items-center justify-center p-4">
+            <div
+              className="w-full max-w-sm rounded-3xl border border-zinc-800 bg-zinc-900 p-4 text-white shadow-2xl"
+              onClick={event => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-400">
+                  Select Dates
+                </p>
+                {/* <button
+                  type="button"
+                  className="text-zinc-400 hover:text-white"
+                  onClick={() => setShowCalendar(false)}
+                >
+                  ✕
+                </button> */}
+              </div>
+
+              <MiniCalendar
+                currentMonth={currentMonth}
+                onMonthChange={setCurrentMonth}
+                className="mt-4"
+                renderDay={(day, { dateKey, inCurrentMonth }) => {
+                  const isSelected = selectedDateSet.has(dateKey)
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => toggleDateSelection(day)}
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium
+                        ${isSelected ? 'bg-white text-black' : inCurrentMonth ? 'text-white' : 'text-zinc-600'}`}
+                    >
+                      {format(day, 'd')}
+                    </button>
+                  )
+                }}
+              />
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar(false)}
+                  className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

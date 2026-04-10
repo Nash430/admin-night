@@ -1,55 +1,27 @@
-import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
-import { rateLimit } from '@/utils/rateLimit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/utils/withAuth'
 
-export async function POST(request: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+export const POST = withAuth(
+  { key: 'todos:bulk-delete', limit: 5, windowMs: 10_000 },
+  async ({ user, supabase, body }) => {
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((id): id is string => typeof id === 'string')
+      : []
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    }
 
-  const limiter = rateLimit(`todos:bulk-delete:${user.id}`, 5, 10_000)
-  if (!limiter.ok) {
-    const retryAfter = Math.ceil((limiter.resetAt - Date.now()) / 1000)
-    return NextResponse.json(
-      { error: 'Too many requests' },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
-    )
-  }
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .in('id', ids)
+      .eq('user_id', user.id)
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const payload = body as Record<string, unknown>
-  const ids = Array.isArray(payload.ids)
-    ? payload.ids.filter((id): id is string => typeof id === 'string')
-    : []
-
-  if (ids.length === 0) {
-    return NextResponse.json({ error: 'ids required' }, { status: 400 })
-  }
-
-  const { error } = await supabase
-    .from('todos')
-    .delete()
-    .in('id', ids)
-    .eq('user_id', user.id)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ deleted_ids: ids })
-}
+    return NextResponse.json({ deleted_ids: ids })
+  },
+)

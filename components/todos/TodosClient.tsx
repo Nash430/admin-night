@@ -21,13 +21,18 @@ function createTempId() {
 }
 
 //根據新增表單 input，建立一筆前端暫時顯示用的 optimistic todo
-function createOptimisticTodo(input: NewTodoInput, tempId: string): Todo {
+function createOptimisticTodo(
+  input: NewTodoInput,
+  tempId: string,
+  dueDateOverride?: string
+): Todo {
   return {
     //先塞 tempId，之後等 API 成功再換成真正的 server id
     id: tempId,
     title: input.title,
     description: input.description ?? null,
-    due_date: input.due_date,
+    due_date: dueDateOverride ?? input.due_date,
+    end_date: input.end_date ?? null,
     due_time: input.start_time,
     end_time: input.end_time,
     priority: input.priority,
@@ -39,14 +44,6 @@ function sortTodosByTime(a: Todo, b: Todo) {
   return (a.due_time ?? '').localeCompare(b.due_time ?? '')
 }
 
-async function readJsonSafe(response: Response): Promise<JsonObject> {
-  return response.json().catch(() => ({}))
-}
-
-function getErrorMessage(payload: JsonObject, fallback: string) {
-  return typeof payload.error === 'string' ? payload.error : fallback
-}
-
 // 統一處理，先改 UI，失敗再 rollback
 async function optimisticFetch(
   url: string,
@@ -56,10 +53,11 @@ async function optimisticFetch(
 ): Promise<{ isSuccess: boolean; payload: JsonObject }> {
   try {
     const response = await fetch(url, options)
-    const payload = await readJsonSafe(response)
+    const payload = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      console.error(getErrorMessage(payload, fallbackMessage))
+      const msg = typeof payload.error === 'string' ? payload.error : fallbackMessage
+      console.error(msg)
       onRollback()
       return { isSuccess: false, payload }
     }
@@ -85,14 +83,17 @@ export default function TodosClient({ initialTodos }: Props) {
   }, [todos, selectedDateKey])
 
   async function onCreateTodo(input: NewTodoInput) {
-    const tempId = createTempId()
-    const optimisticTodo = createOptimisticTodo(input, tempId)
+    const uniqueDates = Array.from(new Set(input.dates ?? [input.due_date])).sort()
+    const tempIds = uniqueDates.map(() => createTempId())
+    const optimisticTodos = uniqueDates.map((dateKey, index) =>
+      createOptimisticTodo(input, tempIds[index], dateKey)
+    )
 
-    const removeTempTodo = () => {
-      setTodos(prev => prev.filter(t => t.id !== tempId))
+    const removeTempTodos = () => {
+      setTodos(prev => prev.filter(t => !tempIds.includes(t.id)))
     }
 
-    setTodos(prev => [...prev, optimisticTodo])
+    setTodos(prev => [...prev, ...optimisticTodos])
 
     const { isSuccess, payload } = await optimisticFetch(
       '/api/todos',
@@ -101,23 +102,43 @@ export default function TodosClient({ initialTodos }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       },
-      removeTempTodo,
+      removeTempTodos,
       'Failed to create todo'
     )
 
     if (!isSuccess) return
 
+    const serverTodos = (payload.todos as Todo[] | undefined) ?? []
     const serverTodo = payload.todo as Todo | undefined
 
-    if (!serverTodo?.id) {
-      removeTempTodo()
+    if (serverTodos.length > 0) {
+      const byDate = new Map<string, Todo>()
+      serverTodos.forEach(todo => {
+        if (todo?.due_date) byDate.set(todo.due_date, todo)
+      })
+
+      // 把原本 tempId 那筆 optimistic todo 換成 server 真正回來的 todo 資料
+      setTodos(prev =>
+        prev
+          .map(t => {
+            if (!tempIds.includes(t.id)) return t
+            const replacement = byDate.get(t.due_date)
+            return replacement ? { ...t, ...replacement } : t
+          })
+          .filter(t => !tempIds.includes(t.id) || byDate.has(t.due_date))
+      )
       return
     }
 
-    // 把原本 tempId 那筆 optimistic todo 換成 server 真正回來的 todo 資料
-    setTodos(prev =>
-      prev.map(t => (t.id === tempId ? { ...t, ...serverTodo } : t))
-    )
+    if (serverTodo?.id) {
+      const firstTempId = tempIds[0]
+      setTodos(prev =>
+        prev.map(t => (t.id === firstTempId ? { ...t, ...serverTodo } : t))
+      )
+      return
+    }
+
+    removeTempTodos()
   }
 
   async function onTodoUpdated(updatedTodo: Todo) {

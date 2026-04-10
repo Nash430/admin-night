@@ -39,8 +39,10 @@ export default function TodoList({ selectedDate, todos, onCreateTodo, onTodoUpda
 
   async function handleDeleteSelected() {
     if (selectedDeleteIds.length === 0) return
-    const isSuccess = await onTodosDeleted(selectedDeleteIds)
-    if (isSuccess) setSelectedDeleteIds([])
+    const ids = selectedDeleteIds
+    setSelectedDeleteIds([])
+    const isSuccess = await onTodosDeleted(ids)
+    if (!isSuccess) setSelectedDeleteIds(ids)
   }
 
   return (
@@ -89,7 +91,7 @@ export default function TodoList({ selectedDate, todos, onCreateTodo, onTodoUpda
                 {formatTime(todo.due_time) ?? '--:--'}
               </div>
               <div className="flex flex-1 items-start justify-between gap-4 border-l border-zinc-800 pl-4">
-                <div>
+                <div aria-label="Click for details">
                   <p className={`text-sm font-semibold ${todo.is_done ? 'text-zinc-500 line-through' : 'text-white'}`}
                   >
                     {todo.title}
